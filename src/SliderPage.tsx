@@ -16,7 +16,7 @@ export default function SliderPage() {
         visibleCount={7}
         overscan={3}
         direction="x"
-        renderItem={(item, index) => (
+        renderItem={(item) => (
           <div style={{ height: "100%", width: "calc(100vw / 7)" }}>
             {item.title}
           </div>
