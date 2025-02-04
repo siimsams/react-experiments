@@ -81,6 +81,7 @@ export default class RecycledList<T> extends PureComponent<
     window.removeEventListener("resize", this.handleResize);
   }
 
+  //TODO: The issue is that when this is called we rerender the entire list.
   measureContainer = () => {
     const container = this.containerRef.current;
     if (!container) return;
