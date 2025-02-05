@@ -81,7 +81,6 @@ export default class RecycledList<T> extends PureComponent<
     window.removeEventListener("resize", this.handleResize);
   }
 
-  //TODO: The issue is that when this is called we rerender the entire list.
   measureContainer = () => {
     const container = this.containerRef.current;
     if (!container) return;
@@ -178,11 +177,7 @@ export default class RecycledList<T> extends PureComponent<
   }
 
   render() {
-    const { data, direction = "y" } = this.props;
-    const { itemSize } = this.state;
-
-    // If we have itemSize, total size = itemSize * data.length
-    const totalSize = itemSize ? itemSize * data.length : "auto";
+    const { direction = "y" } = this.props;
 
     const visibleItems = this.getVisibleItems();
 
@@ -199,7 +194,7 @@ export default class RecycledList<T> extends PureComponent<
         <div
           style={{
             position: "relative",
-            [direction === "x" ? "width" : "height"]: totalSize,
+            [direction === "x" ? "width" : "height"]: 1000,
             [direction === "x" ? "height" : "width"]: "100%",
           }}
         >
