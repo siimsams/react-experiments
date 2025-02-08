@@ -125,19 +125,45 @@ export default class RecycledList<T> extends PureComponent<
   };
 
   handleResize = () => {
+    if (!this.containerRef.current) return;
+    
     this.ignoreScroll = true;
+  
     if (this.resizeRAF) {
       cancelAnimationFrame(this.resizeRAF);
     }
+  
     this.resizeRAF = requestAnimationFrame(() => {
+      const { itemSize, scroll } = this.state;
+  
+      // Calculate the first visible index
+      const firstVisibleIndex = itemSize ? Math.floor(scroll / itemSize) : 0;
+  
+      // Measure new container size
       this.measureContainer();
+  
+      this.setState((prevState) => {
+        const newItemSize = prevState.containerSize / prevState.visibleCount;
+        const newScrollPos = firstVisibleIndex * newItemSize;
+  
+        // Ensure the correct item stays visible
+        this.containerRef.current!.scrollTo({
+          [prevState.direction === "x" ? "left" : "top"]: newScrollPos,
+        });
+  
+        return {
+          itemSize: newItemSize,
+          scroll: newScrollPos,
+        };
+      });
+  
       this.resizeRAF = null;
-
+      
       setTimeout(() => {
         this.ignoreScroll = false;
       }, 100);
     });
-  };
+  };  
 
   getVisibleItems() {
     const { data, overscan = 2, renderItem } = this.props;
