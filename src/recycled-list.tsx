@@ -107,8 +107,6 @@ export default class RecycledList<T> extends PureComponent<
       return;
     }
 
-    console.log("handleScroll");
-
     if (this.scrollRAF) {
       cancelAnimationFrame(this.scrollRAF);
     }
@@ -126,73 +124,72 @@ export default class RecycledList<T> extends PureComponent<
 
   handleResize = () => {
     if (!this.containerRef.current) return;
-    
-    this.ignoreScroll = true;
-  
-    if (this.resizeRAF) {
-      cancelAnimationFrame(this.resizeRAF);
-    }
+    // Cancel any pending resize frame
+    if (this.resizeRAF) cancelAnimationFrame(this.resizeRAF);
   
     this.resizeRAF = requestAnimationFrame(() => {
-      const { itemSize, scroll } = this.state;
+      // Get the old item size and physical scroll offset
+      const { itemSize: oldItemSize, scroll: oldScroll } = this.state;
+      // Calculate the logical scroll position (fractional index)
+      const virtualIndex = oldItemSize ? oldScroll / oldItemSize : 0;
   
-      // Calculate the first visible index
-      const firstVisibleIndex = itemSize ? Math.floor(scroll / itemSize) : 0;
+      // Re-measure the container. For horizontal scrolling:
+      const container = this.containerRef.current;
+      const newContainerSize = container!.clientWidth;
+      // Assuming visibleCount is provided (e.g., 7)
+      const newItemSize = newContainerSize / (this.props.visibleCount || 7);
   
-      // Measure new container size
-      this.measureContainer();
+      // Calculate the new scroll offset to keep the same logical position
+      const newScroll = virtualIndex * newItemSize;
   
-      this.setState((prevState) => {
-        const newItemSize = prevState.containerSize / prevState.visibleCount;
-        const newScrollPos = firstVisibleIndex * newItemSize;
+      // Update the container's scroll position
+      container!.scrollLeft = newScroll;
   
-        // Ensure the correct item stays visible
-        this.containerRef.current!.scrollTo({
-          [prevState.direction === "x" ? "left" : "top"]: newScrollPos,
-        });
-  
-        return {
-          itemSize: newItemSize,
-          scroll: newScrollPos,
-        };
+      // Update state with the new measurements and scroll position
+      this.setState({
+        containerSize: newContainerSize,
+        itemSize: newItemSize,
+        scroll: newScroll,
       });
   
       this.resizeRAF = null;
-      
+  
+      // Give a little delay before re-enabling scroll handling (if needed)
       setTimeout(() => {
         this.ignoreScroll = false;
       }, 100);
     });
-  };  
+  };
+  
 
   getVisibleItems() {
     const { data, overscan = 2, renderItem } = this.props;
-    const { scroll, containerSize, visibleCount, direction } = this.state;
-
-    const itemSize = containerSize / visibleCount;
-
-    // Normal virtualization math
-    const startIndex = Math.floor(scroll / itemSize);
+    const { scroll, containerSize, visibleCount, direction, itemSize } = this.state;
+  
+    // itemSize should now be up-to-date
+    const size = itemSize || containerSize / visibleCount;
+  
+    const startIndex = Math.floor(scroll / size);
     const safeStartIndex = Math.max(0, startIndex - overscan);
-    const endIndex = Math.min(
-      data.length - 1,
-      startIndex + visibleCount + overscan,
-    );
-
+    const endIndex = Math.min(data.length - 1, startIndex + visibleCount + overscan);
+  
     const itemsToRender = [];
     for (let i = safeStartIndex; i <= endIndex; i++) {
       const item = data[i];
       const element = renderItem(item, i);
-
-      // Merge the user style with absolute positioning
-      const userStyle = element.props.style || {};
+  
+      // Using transform: translateX to position the item
+      const translateValue = i * size;
       const mergedStyle: React.CSSProperties = {
-        ...userStyle,
+        ...element.props.style,
         position: "absolute",
-        [direction === "x" ? "left" : "top"]: i * itemSize,
-        [direction === "x" ? "top" : "left"]: 0,
+        transform: direction === "x"
+          ? `translate3d(${translateValue}px, 0, 0)`
+          : `translate3d(0, ${translateValue}px, 0)`,
+        width: direction === "x" ? `${size}px` : "100%",
+        height: direction === "x" ? "100%" : `${size}px`,
       };
-
+  
       itemsToRender.push({
         element,
         index: i,
@@ -201,6 +198,7 @@ export default class RecycledList<T> extends PureComponent<
     }
     return itemsToRender;
   }
+  
 
   render() {
     const { direction = "y" } = this.props;
