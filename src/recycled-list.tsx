@@ -47,8 +47,6 @@ export default class RecycledList<T> extends PureComponent<
   private scrollRAF: number | null = null;
   private resizeRAF: number | null = null;
 
-  private ignoreScroll = false;
-
   constructor(props: RecycledListProps<T>) {
     super(props);
 
@@ -103,7 +101,7 @@ export default class RecycledList<T> extends PureComponent<
   };
 
   handleScroll = () => {
-    if (this.ignoreScroll || this.resizeRAF) {
+    if (this.resizeRAF) {
       return;
     }
 
@@ -124,28 +122,28 @@ export default class RecycledList<T> extends PureComponent<
 
   handleResize = () => {
     if (!this.containerRef.current) return;
-    // Cancel any pending resize frame
     if (this.resizeRAF) cancelAnimationFrame(this.resizeRAF);
   
     this.resizeRAF = requestAnimationFrame(() => {
-      // Get the old item size and physical scroll offset
       const { itemSize: oldItemSize, scroll: oldScroll } = this.state;
-      // Calculate the logical scroll position (fractional index)
       const virtualIndex = oldItemSize ? oldScroll / oldItemSize : 0;
+      const container = this.containerRef.current!;
   
-      // Re-measure the container. For horizontal scrolling:
-      const container = this.containerRef.current;
-      const newContainerSize = container!.clientWidth;
-      // Assuming visibleCount is provided (e.g., 7)
+      // Use the appropriate container size based on direction
+      const newContainerSize =
+        this.state.direction === "x"
+          ? container.clientWidth
+          : container.clientHeight;
       const newItemSize = newContainerSize / (this.props.visibleCount || 7);
-  
-      // Calculate the new scroll offset to keep the same logical position
       const newScroll = virtualIndex * newItemSize;
   
-      // Update the container's scroll position
-      container!.scrollLeft = newScroll;
+      // Update the correct scroll property based on direction
+      if (this.state.direction === "x") {
+        container.scrollLeft = newScroll;
+      } else {
+        container.scrollTop = newScroll;
+      }
   
-      // Update state with the new measurements and scroll position
       this.setState({
         containerSize: newContainerSize,
         itemSize: newItemSize,
@@ -153,13 +151,9 @@ export default class RecycledList<T> extends PureComponent<
       });
   
       this.resizeRAF = null;
-  
-      // Give a little delay before re-enabling scroll handling (if needed)
-      setTimeout(() => {
-        this.ignoreScroll = false;
-      }, 100);
     });
   };
+  
   
 
   getVisibleItems() {
@@ -218,7 +212,7 @@ export default class RecycledList<T> extends PureComponent<
         <div
           style={{
             position: "relative",
-            [direction === "x" ? "width" : "height"]: 1000,
+            [direction === "x" ? "width" : "height"]: 100000,
             [direction === "x" ? "height" : "width"]: "100%",
           }}
         >
