@@ -22,6 +22,8 @@
         overscroll-behavior: contain;
         background: #f9fafb;
         scroll-behavior: smooth;
+        scroll-snap-type: x mandatory;
+        scroll-padding-left: 60px;
       }
       
       /* Custom scrollbar styling */
@@ -120,12 +122,6 @@
             // Set new timeout for scroll end detection
             scrollTimeoutRef.current = setTimeout(() => {
               setIsScrolling(false);
-              // Snap to nearest column when scrolling stops
-              const nearestColumn = Math.round(el.scrollLeft / colWidth);
-              const targetScrollLeft = nearestColumn * colWidth;
-              if (Math.abs(el.scrollLeft - targetScrollLeft) > 1) {
-                el.scrollTo({ left: targetScrollLeft, behavior: 'smooth' });
-              }
             }, 150);
           };
           
@@ -183,7 +179,11 @@
           const label = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
           return (
             <div
-              style={{ gridColumnStart: 2 + dayIndex, gridRowStart: 1 }}
+              style={{ 
+                gridColumnStart: 2 + dayIndex, 
+                gridRowStart: 1,
+                scrollSnapAlign: 'start'
+              }}
               className="sticky top-0 z-20 border-b border-gray-200 bg-gradient-to-b from-gray-600 to-gray-700 text-white py-3 text-center font-medium shadow-sm"
               title={d.toDateString()}
             >
