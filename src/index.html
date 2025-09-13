@@ -11,7 +11,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-      html, body, #root { height: 100%; margin: 0; }
+      html, body, #root { height: 100%; margin: 0; font-family: system-ui, -apple-system, sans-serif; }
       #scroller {
         width: 100vw;
         height: 100vh;
@@ -20,7 +20,37 @@
         touch-action: pan-x pan-y;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
-        background: #fff;
+        background: #f9fafb;
+        scroll-behavior: smooth;
+      }
+      
+      /* Custom scrollbar styling */
+      #scroller::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      
+      #scroller::-webkit-scrollbar-track {
+        background: #f1f5f9;
+      }
+      
+      #scroller::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+      }
+      
+      #scroller::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+      
+      /* Smooth transitions for sticky elements */
+      .sticky {
+        transition: box-shadow 0.2s ease;
+      }
+      
+      /* Enhanced grid cell hover effects */
+      .grid-cell:hover {
+        background-color: rgba(59, 130, 246, 0.05);
       }
     </style>
   </head>
@@ -50,34 +80,72 @@
       }
 
       function GridCalendar() {
-        // Config
+        // Config state
+        const [visibleHours, setVisibleHours] = useState(12);
+        const [showConfig, setShowConfig] = useState(false);
+        
+        // Static config
         const startDate = useMemo(() => new Date(2024, 0, 1), []);
         const daysToRender = 365 * 10; // wide enough to force X scroll
-        const gutterWidth = 84;
-        const colWidth = 150;
-        const headerHeight = 40;
-        const rowHeight = 50;
-        const hours = 24;
+        const gutterWidth = 60; // Reduced width for more compact display
+        const colWidth = 180; // Increased for better content fit
+        const headerHeight = 60; // Increased for better header display
+        const rowHeight = 60; // Increased for better content fit
+        const totalHours = 24;
         const overscan = 3;
 
         // Scroll tracking
         const scrollerRef = useRef(null);
         const [scrollLeft, setScrollLeft] = useState(0);
+        const [scrollTop, setScrollTop] = useState(0);
         const [viewportW, setViewportW] = useState(0);
+        const [viewportH, setViewportH] = useState(0);
+        const [isScrolling, setIsScrolling] = useState(false);
+        const scrollTimeoutRef = useRef(null);
 
         useLayoutEffect(() => {
           const el = scrollerRef.current;
           if (!el) return;
-          const onScroll = () => setScrollLeft(el.scrollLeft);
-          const measure = () => setViewportW(el.clientWidth);
+          
+          const onScroll = () => {
+            setScrollLeft(el.scrollLeft);
+            setScrollTop(el.scrollTop);
+            setIsScrolling(true);
+            
+            // Clear existing timeout
+            if (scrollTimeoutRef.current) {
+              clearTimeout(scrollTimeoutRef.current);
+            }
+            
+            // Set new timeout for scroll end detection
+            scrollTimeoutRef.current = setTimeout(() => {
+              setIsScrolling(false);
+              // Snap to nearest column when scrolling stops
+              const nearestColumn = Math.round(el.scrollLeft / colWidth);
+              const targetScrollLeft = nearestColumn * colWidth;
+              if (Math.abs(el.scrollLeft - targetScrollLeft) > 1) {
+                el.scrollTo({ left: targetScrollLeft, behavior: 'smooth' });
+              }
+            }, 150);
+          };
+          
+          const measure = () => {
+            setViewportW(el.clientWidth);
+            setViewportH(el.clientHeight);
+          };
+          
           measure();
           el.addEventListener("scroll", onScroll, { passive: true });
           window.addEventListener("resize", measure);
+          
           return () => {
             el.removeEventListener("scroll", onScroll);
             window.removeEventListener("resize", measure);
+            if (scrollTimeoutRef.current) {
+              clearTimeout(scrollTimeoutRef.current);
+            }
           };
-        }, []);
+        }, [colWidth]);
 
         // Effective X inside the day area
         const scrollLeftX = Math.max(0, scrollLeft - gutterWidth);
@@ -86,16 +154,24 @@
         // Helpers
         const dateFromIndex = (i) => new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
 
+        // Calculate effective viewport height for the calendar
+        const effectiveViewportHeight = Math.max(400, viewportH);
+        const maxPossibleVisibleHours = Math.floor((effectiveViewportHeight - headerHeight - 100) / rowHeight);
+        const actualVisibleHours = Math.min(visibleHours, totalHours, Math.max(6, maxPossibleVisibleHours));
+        
+        // Dynamic scroller height based on visible hours
+        const scrollerHeight = headerHeight + (actualVisibleHours * rowHeight) + 20; // 20px for padding
+        
         // Canvas size - guarantees both axis scroll regardless of recycling
         const canvasWidth = gutterWidth + daysToRender * colWidth;
-        const canvasHeight = headerHeight + hours * rowHeight;
+        const canvasHeight = headerHeight + totalHours * rowHeight;
 
         // Grid
         const gridStyle = {
           display: "grid",
           gridTemplateColumns: `${gutterWidth}px`,
           gridAutoColumns: `${colWidth}px`,
-          gridTemplateRows: `${headerHeight}px ` + Array.from({ length: hours }).map(() => `${rowHeight}px`).join(" "),
+          gridTemplateRows: `${headerHeight}px ` + Array.from({ length: totalHours }).map(() => `${rowHeight}px`).join(" "),
           width: `${canvasWidth}px`,
           height: `${canvasHeight}px`,
           position: "relative",
@@ -108,11 +184,11 @@
           return (
             <div
               style={{ gridColumnStart: 2 + dayIndex, gridRowStart: 1 }}
-              className="sticky top-0 z-10 border-b border-gray-100 bg-gradient-to-b from-gray-600 to-gray-700 text-white py-2 text-center text-sm font-medium"
+              className="sticky top-0 z-20 border-b border-gray-200 bg-gradient-to-b from-gray-600 to-gray-700 text-white py-3 text-center font-medium shadow-sm"
               title={d.toDateString()}
             >
-              <div>{weekday}</div>
-              <div className="text-xs opacity-80">{label}</div>
+              <div className="text-sm font-semibold">{weekday}</div>
+              <div className="text-xs opacity-90 mt-1">{label}</div>
             </div>
           );
         };
@@ -120,7 +196,7 @@
         const renderBodyCell = (dayIndex, hour) => (
           <div
             style={{ gridColumnStart: 2 + dayIndex, gridRowStart: 2 + hour }}
-            className="border-b border-r border-gray-200"
+            className="grid-cell border-b border-r border-gray-200 transition-colors duration-150"
           />
         );
 
@@ -149,7 +225,7 @@
           />
         );
 
-        const BodyRows = Array.from({ length: hours }).map((_, hour) => (
+        const BodyRows = Array.from({ length: totalHours }).map((_, hour) => (
           <RecycleListComponent
             key={`row-${hour}`}
             itemCount={daysToRender}
@@ -164,12 +240,12 @@
         // Non recycled left gutter
         const Gutter = (
           <>
-            <div className="sticky top-0 z-10 col-start-1 row-start-1 border-b border-gray-200 bg-white" />
-            {Array.from({ length: hours }).map((_, i) => (
+            <div className="sticky top-0 z-20 col-start-1 row-start-1 border-b border-gray-200 bg-white shadow-sm" />
+            {Array.from({ length: totalHours }).map((_, i) => (
               <div
                 key={`g-${i}`}
                 style={{ gridColumnStart: 1, gridRowStart: 2 + i }}
-                className="sticky left-0 border-r border-gray-200 bg-white p-1.5 text-right text-xs font-medium text-gray-400"
+                className="sticky left-0 z-10 border-r border-gray-200 bg-white px-2 py-4 text-right text-sm font-medium text-gray-500 flex items-center justify-end shadow-sm"
               >
                 {String(i).padStart(2, "0")}:00
               </div>
@@ -208,11 +284,11 @@
                       gridRowStart: ev.rowStart,
                       gridRowEnd: `span ${ev.rowSpan}`,
                     }}
-                    className={`m-1 flex flex-col rounded-lg border ${c.border} ${c.bg} p-1`}
+                    className={`m-2 flex flex-col rounded-lg border ${c.border} ${c.bg} p-3 shadow-sm hover:shadow-md transition-shadow duration-200`}
                   >
-                    <span className={`text-xs ${c.text}`}>{ev.time}</span>
-                    <span className={`text-xs font-medium ${c.text}`}>{ev.title}</span>
-                    <span className={`text-xs ${c.text}`}>{ev.place}</span>
+                    <span className={`text-xs font-medium ${c.text} opacity-80`}>{ev.time}</span>
+                    <span className={`text-sm font-semibold ${c.text} mt-1 leading-tight`}>{ev.title}</span>
+                    <span className={`text-xs ${c.text} opacity-75 mt-1`}>{ev.place}</span>
                   </div>
                 );
               })}
