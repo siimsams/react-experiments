@@ -23,37 +23,14 @@
         background: #f9fafb;
         scroll-behavior: smooth;
         scroll-snap-type: x mandatory;
-        scroll-padding-left: 60px;
+        scroll-padding-left: 60px; /* keep in sync with gutterWidth */
       }
-      
-      /* Custom scrollbar styling */
-      #scroller::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      
-      #scroller::-webkit-scrollbar-track {
-        background: #f1f5f9;
-      }
-      
-      #scroller::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 4px;
-      }
-      
-      #scroller::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-      }
-      
-      /* Smooth transitions for sticky elements */
-      .sticky {
-        transition: box-shadow 0.2s ease;
-      }
-      
-      /* Enhanced grid cell hover effects */
-      .grid-cell:hover {
-        background-color: rgba(59, 130, 246, 0.05);
-      }
+      #scroller::-webkit-scrollbar { width: 8px; height: 8px; }
+      #scroller::-webkit-scrollbar-track { background: #f1f5f9; }
+      #scroller::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+      #scroller::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      .sticky { transition: box-shadow 0.2s ease; }
+      .grid-cell:hover { background-color: rgba(59, 130, 246, 0.05); }
     </style>
   </head>
   <body>
@@ -62,7 +39,6 @@
     <script type="text/babel">
       const { useMemo, useRef, useState, useLayoutEffect, PureComponent, cloneElement } = React;
 
-      /* Horizontal recycle list that renders only visible grid columns */
       class RecycleListComponent extends PureComponent {
         getRowsToRenderInDom() {
           const { itemCount, itemSize, overscan = 2, renderItem, scrollLeftX, viewportX } = this.props;
@@ -82,17 +58,16 @@
       }
 
       function GridCalendar() {
-        // Config state
+        // Config that can change with viewport
         const [visibleHours, setVisibleHours] = useState(12);
-        const [showConfig, setShowConfig] = useState(false);
-        
+        const [colWidth, setColWidth] = useState(180); // will be recalculated to always show 5 days
+
         // Static config
         const startDate = useMemo(() => new Date(2024, 0, 1), []);
-        const daysToRender = 365 * 10; // wide enough to force X scroll
-        const gutterWidth = 60; // Reduced width for more compact display
-        const colWidth = 180; // Increased for better content fit
-        const headerHeight = 60; // Increased for better header display
-        const rowHeight = 60; // Increased for better content fit
+        const daysToRender = 365 * 10;
+        const gutterWidth = 60;
+        const headerHeight = 60;
+        const rowHeight = 60;
         const totalHours = 24;
         const overscan = 3;
 
@@ -105,64 +80,58 @@
         const [isScrolling, setIsScrolling] = useState(false);
         const scrollTimeoutRef = useRef(null);
 
+        // Measure viewport and compute colWidth so 5 columns fill the available width
         useLayoutEffect(() => {
           const el = scrollerRef.current;
           if (!el) return;
-          
+
+          const computeColWidth = () => {
+            const w = el.clientWidth;
+            setViewportW(w);
+            setViewportH(el.clientHeight);
+            // ensure we always show exactly 5 day columns in the visible area
+            const available = Math.max(0, w - gutterWidth);
+            const perCol = available / 5;
+            // cap to a sensible min to avoid zero on tiny widths
+            const next = Math.max(40, Math.floor(perCol));
+            setColWidth(next);
+          };
+
           const onScroll = () => {
             setScrollLeft(el.scrollLeft);
             setScrollTop(el.scrollTop);
             setIsScrolling(true);
-            
-            // Clear existing timeout
-            if (scrollTimeoutRef.current) {
-              clearTimeout(scrollTimeoutRef.current);
-            }
-            
-            // Set new timeout for scroll end detection
-            scrollTimeoutRef.current = setTimeout(() => {
-              setIsScrolling(false);
-            }, 150);
+            if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+            scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 150);
           };
-          
-          const measure = () => {
-            setViewportW(el.clientWidth);
-            setViewportH(el.clientHeight);
-          };
-          
-          measure();
+
+          computeColWidth();
           el.addEventListener("scroll", onScroll, { passive: true });
-          window.addEventListener("resize", measure);
-          
+          window.addEventListener("resize", computeColWidth);
+          // some devices fire orientationchange without resize right away
+          window.addEventListener("orientationchange", computeColWidth);
+
           return () => {
             el.removeEventListener("scroll", onScroll);
-            window.removeEventListener("resize", measure);
-            if (scrollTimeoutRef.current) {
-              clearTimeout(scrollTimeoutRef.current);
-            }
+            window.removeEventListener("resize", computeColWidth);
+            window.removeEventListener("orientationchange", computeColWidth);
+            if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
           };
-        }, [colWidth]);
+        }, []);
 
-        // Effective X inside the day area
+        // Effective X within day area
         const scrollLeftX = Math.max(0, scrollLeft - gutterWidth);
         const viewportX = Math.max(0, viewportW - gutterWidth);
 
-        // Helpers
         const dateFromIndex = (i) => new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
 
-        // Calculate effective viewport height for the calendar
         const effectiveViewportHeight = Math.max(400, viewportH);
         const maxPossibleVisibleHours = Math.floor((effectiveViewportHeight - headerHeight - 100) / rowHeight);
         const actualVisibleHours = Math.min(visibleHours, totalHours, Math.max(6, maxPossibleVisibleHours));
-        
-        // Dynamic scroller height based on visible hours
-        const scrollerHeight = headerHeight + (actualVisibleHours * rowHeight) + 20; // 20px for padding
-        
-        // Canvas size - guarantees both axis scroll regardless of recycling
+
         const canvasWidth = gutterWidth + daysToRender * colWidth;
         const canvasHeight = headerHeight + totalHours * rowHeight;
 
-        // Grid
         const gridStyle = {
           display: "grid",
           gridTemplateColumns: `${gutterWidth}px`,
@@ -179,10 +148,10 @@
           const label = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
           return (
             <div
-              style={{ 
-                gridColumnStart: 2 + dayIndex, 
+              style={{
+                gridColumnStart: 2 + dayIndex,
                 gridRowStart: 1,
-                scrollSnapAlign: 'start'
+                scrollSnapAlign: "start"
               }}
               className="sticky top-0 z-20 border-b border-gray-200 bg-gradient-to-b from-gray-600 to-gray-700 text-white py-3 text-center font-medium shadow-sm"
               title={d.toDateString()}
@@ -200,7 +169,6 @@
           />
         );
 
-        // Sample events
         const events = [
           { dayOffset: 1, rowStart: 6,  rowSpan: 3, color: "blue",  title: "Flight to Vancouver", time: "05:00", place: "Toronto YYZ" },
           { dayOffset: 2, rowStart: 8,  rowSpan: 2, color: "purple", title: "Breakfast",          time: "07:00", place: "Mel's Diner" },
@@ -213,7 +181,6 @@
           pink:   { border: "border-pink-700/10",   bg: "bg-pink-400/20",   text: "text-pink-600"   },
         };
 
-        // Recycled rows
         const HeaderRow = (
           <RecycleListComponent
             itemCount={daysToRender}
@@ -237,7 +204,6 @@
           />
         ));
 
-        // Non recycled left gutter
         const Gutter = (
           <>
             <div className="sticky top-0 z-20 col-start-1 row-start-1 border-b border-gray-200 bg-white shadow-sm" />
@@ -253,7 +219,6 @@
           </>
         );
 
-        // Sentinel ensures the browser allocates the full implicit column width for X scroll
         const Sentinel = (
           <div
             style={{
