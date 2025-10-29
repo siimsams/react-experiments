@@ -79,6 +79,10 @@
         const [viewportH, setViewportH] = useState(0);
         const [isScrolling, setIsScrolling] = useState(false);
         const scrollTimeoutRef = useRef(null);
+        const [isResizing, setIsResizing] = useState(false);
+        const resizeTimeoutRef = useRef(null);
+        const dayIndexBeforeResizeRef = useRef(null);
+        const colWidthRef = useRef(colWidth);
 
         // Measure viewport and compute colWidth so 5 columns fill the available width
         useLayoutEffect(() => {
@@ -87,14 +91,38 @@
 
           const computeColWidth = () => {
             const w = el.clientWidth;
+            const h = el.clientHeight;
+            
+            // Preserve the current day index before resize starts
+            const currentColWidth = colWidthRef.current;
+            if (currentColWidth > 0) {
+              const currentScrollLeftX = Math.max(0, el.scrollLeft - gutterWidth);
+              dayIndexBeforeResizeRef.current = currentScrollLeftX / currentColWidth;
+              setIsResizing(true);
+            }
+            
             setViewportW(w);
-            setViewportH(el.clientHeight);
+            setViewportH(h);
             // ensure we always show exactly 5 day columns in the visible area
             const available = Math.max(0, w - gutterWidth);
             const perCol = available / 5;
             // cap to a sensible min to avoid zero on tiny widths
             const next = Math.max(40, Math.floor(perCol));
+            colWidthRef.current = next;
             setColWidth(next);
+            
+            // Restore scroll position after resize completes
+            if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+            resizeTimeoutRef.current = setTimeout(() => {
+              if (dayIndexBeforeResizeRef.current !== null && next > 0) {
+                const newScrollLeftX = dayIndexBeforeResizeRef.current * next;
+                el.scrollLeft = gutterWidth + newScrollLeftX;
+                setScrollLeft(el.scrollLeft);
+                dayIndexBeforeResizeRef.current = null;
+              }
+              setIsResizing(false);
+              resizeTimeoutRef.current = null;
+            }, 100);
           };
 
           const onScroll = () => {
@@ -116,8 +144,14 @@
             window.removeEventListener("resize", computeColWidth);
             window.removeEventListener("orientationchange", computeColWidth);
             if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+            if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
           };
         }, []);
+
+        // Keep colWidthRef in sync with colWidth state
+        useLayoutEffect(() => {
+          colWidthRef.current = colWidth;
+        }, [colWidth]);
 
         // Effective X within day area
         const scrollLeftX = Math.max(0, scrollLeft - gutterWidth);
@@ -181,12 +215,19 @@
           pink:   { border: "border-pink-700/10",   bg: "bg-pink-400/20",   text: "text-pink-600"   },
         };
 
+        // Pause recycling during resize to prevent visible days from switching
+        // During resize, preserve the day index so the same days remain visible
+        // Use the preserved day index with the new colWidth to maintain visual continuity
+        const effectiveScrollLeftX = isResizing && dayIndexBeforeResizeRef.current !== null && colWidth > 0
+          ? dayIndexBeforeResizeRef.current * colWidth
+          : scrollLeftX;
+
         const HeaderRow = (
           <RecycleListComponent
             itemCount={daysToRender}
             itemSize={colWidth}
             overscan={overscan}
-            scrollLeftX={scrollLeftX}
+            scrollLeftX={effectiveScrollLeftX}
             viewportX={viewportX}
             renderItem={(i) => renderHeaderCell(i)}
           />
@@ -198,7 +239,7 @@
             itemCount={daysToRender}
             itemSize={colWidth}
             overscan={overscan}
-            scrollLeftX={scrollLeftX}
+            scrollLeftX={effectiveScrollLeftX}
             viewportX={viewportX}
             renderItem={(i) => renderBodyCell(i, hour)}
           />
